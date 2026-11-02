@@ -1,4 +1,5 @@
 // Copyright 2026 Digital Clever Solution LLC
+// SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,20 +13,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package hexutil implements hex encoding with 0x prefix.
-This encoding is used by the Ethereum RPC API to transport binary data in JSON payloads.
-
-# Encoding Rules
-
-All hex data must have prefix "0x".
-
-For byte slices, the hex data must be of even length. An empty byte slice
-encodes as "0x".
-
-Integers are encoded using the least amount of digits (no leading zero digits). Their
-encoding may be of uneven length. The number zero encodes as "0x0".
-*/
+// Package hexutil implements the "0x"-prefixed hexadecimal text encoding used
+// by JSON-RPC APIs.
+//
+// Two kinds of values are supported:
+//
+//   - byte strings: "0x" followed by an even number of hex digits ("0x" is the
+//     empty string);
+//   - quantities (unsigned integers): "0x" followed by the shortest hex digits
+//     representing the number, without leading zeros ("0x0" is zero).
+//
+// Decoding accepts both lower and upper case digits and an "0X" prefix.
 package hexutil
 
 import (
@@ -35,205 +33,216 @@ import (
 	"strconv"
 )
 
-const uintBits = 32 << (uint64(^uint(0)) >> 63)
-
-// Errors
+// Decoding errors.
 var (
-	ErrEmptyString   = &decError{"empty hex string"}
-	ErrSyntax        = &decError{"invalid hex string"}
-	ErrMissingPrefix = &decError{"hex string without 0x prefix"}
-	ErrOddLength     = &decError{"hex string of odd length"}
-	ErrEmptyNumber   = &decError{"hex string \"0x\""}
-	ErrLeadingZero   = &decError{"hex number with leading zero digits"}
-	ErrUint64Range   = &decError{"hex number > 64 bits"}
-	ErrUintRange     = &decError{fmt.Sprintf("hex number > %d bits", uintBits)}
-	ErrUint8Range    = &decError{"hex number > 8 bits"}
-	ErrBig256Range   = &decError{"hex number > 256 bits"}
+	ErrEmptyString   = hexError("empty hex string")
+	ErrSyntax        = hexError("invalid hex string")
+	ErrMissingPrefix = hexError("hex string without 0x prefix")
+	ErrOddLength     = hexError("hex string of odd length")
+	ErrEmptyNumber   = hexError(`hex string "0x"`)
+	ErrLeadingZero   = hexError("hex number with leading zero digits")
+	ErrUint64Range   = hexError("hex number > 64 bits")
+	ErrUint8Range    = hexError("hex number > 8 bits")
+	ErrBig256Range   = hexError("hex number > 256 bits")
 )
 
-type decError struct{ msg string }
+// hexError is the type of all decoding errors returned by this package.
+type hexError string
 
-func (err decError) Error() string { return err.msg }
+func (e hexError) Error() string { return string(e) }
 
-// Decode decodes a hex string with 0x prefix.
-func Decode(input string) ([]byte, error) {
-	if len(input) == 0 {
-		return nil, ErrEmptyString
-	}
-	if !has0xPrefix(input) {
-		return nil, ErrMissingPrefix
-	}
-	b, err := hex.DecodeString(input[2:])
-	if err != nil {
-		err = mapError(err)
-	}
-	return b, err
+const prefix = "0x"
+
+// hasPrefix reports whether s starts with "0x" or "0X".
+func hasPrefix[T string | []byte](s T) bool {
+	return len(s) >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')
 }
 
-// MustDecode decodes a hex string with 0x prefix. It panics for invalid input.
-func MustDecode(input string) []byte {
-	dec, err := Decode(input)
+// Encode returns b as a "0x"-prefixed hex string.
+func Encode(b []byte) string {
+	out := make([]byte, len(prefix)+hex.EncodedLen(len(b)))
+	copy(out, prefix)
+	hex.Encode(out[len(prefix):], b)
+	return string(out)
+}
+
+// Decode decodes a "0x"-prefixed hex byte string.
+func Decode(s string) ([]byte, error) {
+	if s == "" {
+		return nil, ErrEmptyString
+	}
+	if !hasPrefix(s) {
+		return nil, ErrMissingPrefix
+	}
+	out, err := hex.DecodeString(s[len(prefix):])
+	if err != nil {
+		return nil, digitsError(err)
+	}
+	return out, nil
+}
+
+// MustDecode is like Decode but panics on error.
+func MustDecode(s string) []byte {
+	b, err := Decode(s)
 	if err != nil {
 		panic(err)
 	}
-	return dec
+	return b
 }
 
-// Encode encodes b as a hex string with 0x prefix.
-func Encode(b []byte) string {
-	enc := make([]byte, len(b)*2+2)
-	copy(enc, "0x")
-	hex.Encode(enc[2:], b)
-	return string(enc)
+// EncodeUint64 returns i as a hex quantity.
+func EncodeUint64(i uint64) string {
+	return prefix + strconv.FormatUint(i, 16)
 }
 
-// DecodeUint64 decodes a hex string with 0x prefix as a quantity.
-func DecodeUint64(input string) (uint64, error) {
-	raw, err := checkNumber(input)
+// DecodeUint64 decodes a hex quantity that fits into 64 bits.
+func DecodeUint64(s string) (uint64, error) {
+	digits, err := quantityDigits([]byte(s), true)
 	if err != nil {
 		return 0, err
 	}
-	dec, err := strconv.ParseUint(raw, 16, 64)
-	if err != nil {
-		err = mapError(err)
+	return parseUint(digits, 64, ErrUint64Range, true)
+}
+
+// EncodeBig returns i as a hex quantity. Negative numbers get a "-" sign in
+// front of the prefix.
+func EncodeBig(i *big.Int) string {
+	if i.Sign() < 0 {
+		return "-" + prefix + new(big.Int).Abs(i).Text(16)
 	}
-	return dec, err
+	return prefix + i.Text(16)
 }
 
-// MustDecodeUint64 decodes a hex string with 0x prefix as a quantity.
-// It panics for invalid input.
-func MustDecodeUint64(input string) uint64 {
-	dec, err := DecodeUint64(input)
-	if err != nil {
-		panic(err)
-	}
-	return dec
-}
-
-// EncodeUint64 encodes i as a hex string with 0x prefix.
-func EncodeUint64(i uint64) string {
-	enc := make([]byte, 2, 10)
-	copy(enc, "0x")
-	return string(strconv.AppendUint(enc, i, 16))
-}
-
-var bigWordNibbles int
-
-func init() {
-	// This is a weird way to compute the number of nibbles required for big.Word.
-	// The usual way would be to use constant arithmetic but go vet can't handle that.
-	b, _ := new(big.Int).SetString("FFFFFFFFFF", 16)
-	switch len(b.Bits()) {
-	case 1:
-		bigWordNibbles = 16
-	case 2:
-		bigWordNibbles = 8
-	default:
-		panic("weird big.Word size")
-	}
-}
-
-// DecodeBig decodes a hex string with 0x prefix as a quantity.
-// Numbers larger than 256 bits are not accepted.
-func DecodeBig(input string) (*big.Int, error) {
-	raw, err := checkNumber(input)
+// DecodeBig decodes a hex quantity of at most 256 bits.
+func DecodeBig(s string) (*big.Int, error) {
+	digits, err := quantityDigits([]byte(s), true)
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) > 64 {
+	return parseBig(digits)
+}
+
+// decodeDigits decodes an even number of hex digits.
+func decodeDigits(digits []byte) ([]byte, error) {
+	if len(digits)%2 != 0 {
+		return nil, ErrOddLength
+	}
+	out := make([]byte, len(digits)/2)
+	if _, err := hex.Decode(out, digits); err != nil {
+		return nil, ErrSyntax
+	}
+	return out, nil
+}
+
+// byteStringDigits validates the text form of a byte string and returns its
+// hex digits. Empty input is accepted and yields no digits. If requirePrefix
+// is false, the "0x" prefix is optional.
+func byteStringDigits(text []byte, requirePrefix bool) ([]byte, error) {
+	if len(text) == 0 {
+		return nil, nil
+	}
+	switch {
+	case hasPrefix(text):
+		text = text[len(prefix):]
+	case requirePrefix:
+		return nil, ErrMissingPrefix
+	}
+	if len(text)%2 != 0 {
+		return nil, ErrOddLength
+	}
+	return text, nil
+}
+
+// quantityDigits validates the text form of a quantity and returns its hex
+// digits. Empty input yields no digits (the zero value) unless strict is set,
+// in which case it is an error.
+func quantityDigits(text []byte, strict bool) ([]byte, error) {
+	if len(text) == 0 {
+		if strict {
+			return nil, ErrEmptyString
+		}
+		return nil, nil
+	}
+	if !hasPrefix(text) {
+		return nil, ErrMissingPrefix
+	}
+	digits := text[len(prefix):]
+	if len(digits) == 0 {
+		return nil, ErrEmptyNumber
+	}
+	if len(digits) > 1 && digits[0] == '0' {
+		return nil, ErrLeadingZero
+	}
+	return digits, nil
+}
+
+// parseUint parses hex digits into an unsigned integer of the given bit size.
+// If sequential is set, digits are checked one by one and the first problem
+// found (an invalid digit or too many digits) is reported; otherwise too many
+// digits are reported before any invalid digit.
+func parseUint(digits []byte, bits int, rangeErr error, sequential bool) (uint64, error) {
+	maxDigits := bits / 4
+	if !sequential && len(digits) > maxDigits {
+		return 0, rangeErr
+	}
+	var v uint64
+	for i, c := range digits {
+		n, ok := nibble(c)
+		if !ok {
+			return 0, ErrSyntax
+		}
+		if i >= maxDigits {
+			return 0, rangeErr
+		}
+		v = v<<4 | uint64(n)
+	}
+	return v, nil
+}
+
+// parseBig parses hex digits into a big integer of at most 256 bits. No
+// digits yield zero.
+func parseBig(digits []byte) (*big.Int, error) {
+	if len(digits) == 0 {
+		return new(big.Int), nil
+	}
+	if len(digits) > 64 {
 		return nil, ErrBig256Range
 	}
-	words := make([]big.Word, len(raw)/bigWordNibbles+1)
-	end := len(raw)
-	for i := range words {
-		start := end - bigWordNibbles
-		if start < 0 {
-			start = 0
+	for _, c := range digits {
+		if _, ok := nibble(c); !ok {
+			return nil, ErrSyntax
 		}
-		for ri := start; ri < end; ri++ {
-			nib := decodeNibble(raw[ri])
-			if nib == badNibble {
-				return nil, ErrSyntax
-			}
-			words[i] *= 16
-			words[i] += big.Word(nib)
-		}
-		end = start
 	}
-	dec := new(big.Int).SetBits(words)
-	return dec, nil
+	v, ok := new(big.Int).SetString(string(digits), 16)
+	if !ok {
+		return nil, ErrSyntax
+	}
+	return v, nil
 }
 
-// MustDecodeBig decodes a hex string with 0x prefix as a quantity.
-// It panics for invalid input.
-func MustDecodeBig(input string) *big.Int {
-	dec, err := DecodeBig(input)
-	if err != nil {
-		panic(err)
-	}
-	return dec
-}
-
-// EncodeBig encodes bigint as a hex string with 0x prefix.
-// The sign of the integer is ignored.
-func EncodeBig(bigint *big.Int) string {
-	nbits := bigint.BitLen()
-	if nbits == 0 {
-		return "0x0"
-	}
-	return fmt.Sprintf("%#x", bigint)
-}
-
-func has0xPrefix(input string) bool {
-	return len(input) >= 2 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X')
-}
-
-func checkNumber(input string) (raw string, err error) {
-	if len(input) == 0 {
-		return "", ErrEmptyString
-	}
-	if !has0xPrefix(input) {
-		return "", ErrMissingPrefix
-	}
-	input = input[2:]
-	if len(input) == 0 {
-		return "", ErrEmptyNumber
-	}
-	if len(input) > 1 && input[0] == '0' {
-		return "", ErrLeadingZero
-	}
-	return input, nil
-}
-
-const badNibble = ^uint64(0)
-
-func decodeNibble(in byte) uint64 {
+// nibble returns the value of a single hex digit.
+func nibble(c byte) (byte, bool) {
 	switch {
-	case in >= '0' && in <= '9':
-		return uint64(in - '0')
-	case in >= 'A' && in <= 'F':
-		return uint64(in - 'A' + 10)
-	case in >= 'a' && in <= 'f':
-		return uint64(in - 'a' + 10)
-	default:
-		return badNibble
+	case '0' <= c && c <= '9':
+		return c - '0', true
+	case 'a' <= c && c <= 'f':
+		return c - 'a' + 10, true
+	case 'A' <= c && c <= 'F':
+		return c - 'A' + 10, true
 	}
+	return 0, false
 }
 
-func mapError(err error) error {
-	if err, ok := err.(*strconv.NumError); ok {
-		switch err.Err {
-		case strconv.ErrRange:
-			return ErrUint64Range
-		case strconv.ErrSyntax:
-			return ErrSyntax
-		}
-	}
-	if _, ok := err.(hex.InvalidByteError); ok {
-		return ErrSyntax
-	}
+// digitsError maps errors of encoding/hex to the errors of this package. An
+// invalid digit is reported before an odd length.
+func digitsError(err error) error {
 	if err == hex.ErrLength {
 		return ErrOddLength
 	}
-	return err
+	return ErrSyntax
+}
+
+// lengthError reports a fixed-size byte string of the wrong length.
+func lengthError(gotDigits, wantBytes int, typeName string) error {
+	return fmt.Errorf("hex string has length %d, want %d for %s", gotDigits, wantBytes*2, typeName)
 }

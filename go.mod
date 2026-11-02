@@ -17,3 +17,6 @@ require (
 	golang.org/x/sys v0.15.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+// Superseded by v0.2.0.
+retract v0.1.0

@@ -1,4 +1,5 @@
 // Copyright 2026 Digital Clever Solution LLC
+// SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +17,7 @@
 package common
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 )
@@ -27,8 +29,9 @@ const (
 	Uint8Size  = 1
 )
 
-// FromHex returns the bytes represented by the hexadecimal string s.
-// s may be prefixed with "0x".
+// FromHex decodes the hex string s, with or without a 0x prefix. An odd
+// number of digits is treated as if it had a leading zero. Decoding stops at
+// the first invalid digit.
 func FromHex(s string) []byte {
 	if has0xPrefix(s) {
 		s = s[2:]
@@ -39,105 +42,88 @@ func FromHex(s string) []byte {
 	return Hex2Bytes(s)
 }
 
-// CopyBytes returns an exact copy of the provided bytes.
+// CopyBytes returns a copy of b. A nil slice stays nil.
 func CopyBytes(b []byte) []byte {
 	if b == nil {
 		return nil
 	}
-	c := make([]byte, len(b))
-	copy(c, b)
-	return c
+	return append([]byte{}, b...)
 }
 
-// has0xPrefix returns true if str begins with '0x' or '0X'.
-func has0xPrefix(str string) bool {
-	return len(str) >= 2 && str[0] == '0' && (str[1] == 'x' || str[1] == 'X')
+// has0xPrefix reports whether s starts with "0x" or "0X".
+func has0xPrefix(s string) bool {
+	return len(s) >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')
 }
 
-// isHexCharacter returns true if c is a valid hexadecimal digit.
-func isHexCharacter(c byte) bool {
-	return ('0' <= c && c <= '9') || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
-}
-
-// isHex returns true if str contains only valid hexadecimal characters
-// and has even length.
-func isHex(str string) bool {
-	if len(str)%2 != 0 {
+// isHex reports whether s is a non-empty, even-length string of hex digits.
+func isHex(s string) bool {
+	if len(s) == 0 || len(s)%2 != 0 {
 		return false
 	}
-	for _, c := range []byte(str) {
-		if !isHexCharacter(c) {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F') {
 			return false
 		}
 	}
 	return true
 }
 
-// Bytes2Hex returns the hexadecimal encoding of d.
-func Bytes2Hex(d []byte) string {
-	return hex.EncodeToString(d)
+// Bytes2Hex returns the hex encoding of d without a prefix.
+func Bytes2Hex(d []byte) string { return hex.EncodeToString(d) }
+
+// Hex2Bytes decodes the unprefixed hex string s. Decoding stops at the first
+// invalid digit and the bytes decoded so far are returned.
+func Hex2Bytes(s string) []byte {
+	b, _ := hex.DecodeString(s)
+	return b
 }
 
-// Hex2Bytes returns the bytes represented by the hexadecimal string str.
-func Hex2Bytes(str string) []byte {
-	h, _ := hex.DecodeString(str)
-	return h
+// Hex2BytesFixed decodes the unprefixed hex string s into exactly n bytes,
+// right-aligned: shorter input is left-padded with zeros, longer input loses
+// its leading bytes.
+func Hex2BytesFixed(s string, n int) []byte {
+	b := Hex2Bytes(s)
+	if len(b) > n {
+		return b[len(b)-n:]
+	}
+	return LeftPadBytes(b, n)
 }
 
-// Hex2BytesFixed returns bytes of a specified fixed length flen.
-func Hex2BytesFixed(str string, flen int) []byte {
-	h, _ := hex.DecodeString(str)
-	if len(h) == flen {
-		return h
+// RightPadBytes returns b extended with zeros to length n. If b already has
+// at least n bytes it is returned unchanged.
+func RightPadBytes(b []byte, n int) []byte {
+	if n <= len(b) {
+		return b
 	}
-	if len(h) > flen {
-		return h[len(h)-flen:]
-	}
-	hh := make([]byte, flen)
-	copy(hh[flen-len(h):flen], h)
-	return hh
+	out := make([]byte, n)
+	copy(out, b)
+	return out
 }
 
-// RightPadBytes zero-pads slice to the right up to length l.
-func RightPadBytes(slice []byte, l int) []byte {
-	if l <= len(slice) {
-		return slice
+// LeftPadBytes returns b prefixed with zeros to length n. If b already has at
+// least n bytes it is returned unchanged.
+func LeftPadBytes(b []byte, n int) []byte {
+	if n <= len(b) {
+		return b
 	}
-	padded := make([]byte, l)
-	copy(padded, slice)
-	return padded
+	out := make([]byte, n)
+	copy(out[n-len(b):], b)
+	return out
 }
 
-// LeftPadBytes zero-pads slice to the left up to length l.
-func LeftPadBytes(slice []byte, l int) []byte {
-	if l <= len(slice) {
-		return slice
+// TrimLeftZeroes returns b without its leading zero bytes.
+func TrimLeftZeroes(b []byte) []byte {
+	i := 0
+	for i < len(b) && b[i] == 0 {
+		i++
 	}
-	padded := make([]byte, l)
-	copy(padded[l-len(slice):], slice)
-	return padded
+	return b[i:]
 }
 
-// TrimLeftZeroes returns a subslice of s without leading zeroes.
-func TrimLeftZeroes(s []byte) []byte {
-	idx := 0
-	for ; idx < len(s); idx++ {
-		if s[idx] != 0 {
-			break
-		}
-	}
-	return s[idx:]
-}
-
-// TrimRightZeroes returns a subslice of s without trailing zeroes.
-func TrimRightZeroes(s []byte) []byte {
-	idx := len(s)
-	for ; idx > 0; idx-- {
-		if s[idx-1] != 0 {
-			break
-		}
-	}
-	return s[:idx]
+// TrimRightZeroes returns b without its trailing zero bytes.
+func TrimRightZeroes(b []byte) []byte {
+	return b[:len(bytes.TrimRight(b, "\x00"))]
 }
 
 // Uint64ToBytes converts a uint64 to an 8-byte little-endian slice.

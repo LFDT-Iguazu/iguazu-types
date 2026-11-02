@@ -1,4 +1,5 @@
 // Copyright 2026 Digital Clever Solution LLC
+// SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,18 +20,21 @@ import (
 	"math/big"
 )
 
-// Common big integers often used.
+// Frequently used big integer constants. They must not be modified.
 var (
-	Big1      = big.NewInt(1)
-	Big2      = big.NewInt(2)
-	Big3      = big.NewInt(3)
-	Big0      = big.NewInt(0)
-	Big32     = big.NewInt(32)
-	Big100    = big.NewInt(100)
-	Big256    = big.NewInt(256)
-	Big257    = big.NewInt(257)
-	BigGwei   = new(big.Int).SetUint64(1_000_000_000)
-	BigWat, _ = new(big.Int).SetString("1000000000000000000", 10)
+	Big0   = big.NewInt(0)
+	Big1   = big.NewInt(1)
+	Big2   = big.NewInt(2)
+	Big3   = big.NewInt(3)
+	Big32  = big.NewInt(32)
+	Big100 = big.NewInt(100)
+	Big256 = big.NewInt(256)
+	Big257 = big.NewInt(257)
+
+	// BigGwei is 10^9.
+	BigGwei = big.NewInt(1_000_000_000)
+	// BigWat is 10^18.
+	BigWat = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
 )
 
 // BnCanCastToUint64 returns true if bn is a non-negative integer that fits in uint64.

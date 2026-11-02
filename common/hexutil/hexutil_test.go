@@ -1,4 +1,5 @@
 // Copyright 2026 Digital Clever Solution LLC
+// SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,245 +16,154 @@
 package hexutil
 
 import (
+	"encoding/json"
+	"errors"
 	"math/big"
 	"testing"
 )
 
-// ---- Decode / Encode ----
-
-func TestEncode(t *testing.T) {
-	tests := []struct {
-		input []byte
-		want  string
-	}{
-		{[]byte{}, "0x"},
-		{[]byte{0x01, 0x02}, "0x0102"},
-		{[]byte{0xde, 0xad, 0xbe, 0xef}, "0xdeadbeef"},
-	}
-	for _, tt := range tests {
-		got := Encode(tt.input)
-		if got != tt.want {
-			t.Errorf("Encode(%x) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
-func TestDecode(t *testing.T) {
-	tests := []struct {
-		input   string
-		want    []byte
-		wantErr error
+func TestEncodeDecode(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []byte
+		err  error
 	}{
 		{"0x", []byte{}, nil},
-		{"0x0102", []byte{0x01, 0x02}, nil},
-		{"0xdeadbeef", []byte{0xde, 0xad, 0xbe, 0xef}, nil},
+		{"0x00ff", []byte{0x00, 0xff}, nil},
+		{"0XAbCd", []byte{0xab, 0xcd}, nil},
 		{"", nil, ErrEmptyString},
-		{"deadbeef", nil, ErrMissingPrefix},
-		{"0x1", nil, ErrOddLength},
-		{"0xgg", nil, ErrSyntax},
+		{"00ff", nil, ErrMissingPrefix},
+		{"0x0", nil, ErrOddLength},
+		{"0xzz", nil, ErrSyntax},
+		{"0xg", nil, ErrSyntax},
 	}
-	for _, tt := range tests {
-		got, err := Decode(tt.input)
-		if tt.wantErr != nil {
-			if err != tt.wantErr {
-				t.Errorf("Decode(%q) error = %v, want %v", tt.input, err, tt.wantErr)
-			}
+	for _, c := range cases {
+		got, err := Decode(c.in)
+		if !errors.Is(err, c.err) {
+			t.Errorf("Decode(%q) error = %v, want %v", c.in, err, c.err)
 			continue
 		}
-		if err != nil {
-			t.Errorf("Decode(%q) unexpected error: %v", tt.input, err)
-			continue
+		if err == nil && string(got) != string(c.want) {
+			t.Errorf("Decode(%q) = %x, want %x", c.in, got, c.want)
 		}
-		if len(got) != len(tt.want) {
-			t.Errorf("Decode(%q) len=%d want %d", tt.input, len(got), len(tt.want))
-			continue
-		}
-		for i := range got {
-			if got[i] != tt.want[i] {
-				t.Errorf("Decode(%q)[%d] = %x, want %x", tt.input, i, got[i], tt.want[i])
-			}
+		if err == nil && Encode(got) != lower(c.in) {
+			t.Errorf("Encode(Decode(%q)) = %q", c.in, Encode(got))
 		}
 	}
 }
 
-func TestMustDecode(t *testing.T) {
-	got := MustDecode("0xabcd")
-	if len(got) != 2 || got[0] != 0xab {
-		t.Errorf("MustDecode unexpected: %x", got)
-	}
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("MustDecode: expected panic for invalid input")
-		}
-	}()
-	MustDecode("invalid")
-}
-
-// ---- DecodeUint64 / EncodeUint64 ----
-
-func TestEncodeUint64(t *testing.T) {
-	tests := []struct {
-		input uint64
-		want  string
-	}{
-		{0, "0x0"},
-		{1, "0x1"},
-		{255, "0xff"},
-		{256, "0x100"},
-	}
-	for _, tt := range tests {
-		got := EncodeUint64(tt.input)
-		if got != tt.want {
-			t.Errorf("EncodeUint64(%d) = %q, want %q", tt.input, got, tt.want)
+func lower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if 'A' <= c && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
 		}
 	}
+	return string(b)
 }
 
-func TestDecodeUint64(t *testing.T) {
-	tests := []struct {
-		input   string
-		want    uint64
-		wantErr error
+func TestQuantities(t *testing.T) {
+	u64 := []struct {
+		in   string
+		want uint64
+		err  error
 	}{
 		{"0x0", 0, nil},
-		{"0xff", 255, nil},
-		{"0x100", 256, nil},
-		{"", 0, ErrEmptyString},
-		{"123", 0, ErrMissingPrefix},
-		{"0x", 0, ErrEmptyNumber},
+		{"0x1f", 0x1f, nil},
+		{"0xffffffffffffffff", 1<<64 - 1, nil},
+		{"0x10000000000000000", 0, ErrUint64Range},
 		{"0x01", 0, ErrLeadingZero},
-		{"0xffffffffffffffff0", 0, ErrUint64Range},
-	}
-	for _, tt := range tests {
-		got, err := DecodeUint64(tt.input)
-		if tt.wantErr != nil {
-			if err != tt.wantErr {
-				t.Errorf("DecodeUint64(%q) error = %v, want %v", tt.input, err, tt.wantErr)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("DecodeUint64(%q) unexpected error: %v", tt.input, err)
-			continue
-		}
-		if got != tt.want {
-			t.Errorf("DecodeUint64(%q) = %d, want %d", tt.input, got, tt.want)
-		}
-	}
-}
-
-func TestMustDecodeUint64(t *testing.T) {
-	if MustDecodeUint64("0xff") != 255 {
-		t.Error("MustDecodeUint64 failed")
-	}
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("MustDecodeUint64: expected panic for invalid input")
-		}
-	}()
-	MustDecodeUint64("invalid")
-}
-
-// ---- DecodeBig / EncodeBig ----
-
-func TestEncodeBig(t *testing.T) {
-	tests := []struct {
-		input *big.Int
-		want  string
-	}{
-		{big.NewInt(0), "0x0"},
-		{big.NewInt(255), "0xff"},
-		{big.NewInt(256), "0x100"},
-	}
-	for _, tt := range tests {
-		got := EncodeBig(tt.input)
-		if got != tt.want {
-			t.Errorf("EncodeBig(%v) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
-func TestDecodeBig(t *testing.T) {
-	tests := []struct {
-		input   string
-		want    int64
-		wantErr error
-	}{
-		{"0x0", 0, nil},
-		{"0xff", 255, nil},
-		{"0x100", 256, nil},
-		{"", 0, ErrEmptyString},
-		{"256", 0, ErrMissingPrefix},
 		{"0x", 0, ErrEmptyNumber},
+		{"1", 0, ErrMissingPrefix},
+		{"0xz", 0, ErrSyntax},
 	}
-	for _, tt := range tests {
-		got, err := DecodeBig(tt.input)
-		if tt.wantErr != nil {
-			if err != tt.wantErr {
-				t.Errorf("DecodeBig(%q) error = %v, want %v", tt.input, err, tt.wantErr)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("DecodeBig(%q) unexpected error: %v", tt.input, err)
-			continue
-		}
-		if got.Int64() != tt.want {
-			t.Errorf("DecodeBig(%q) = %d, want %d", tt.input, got.Int64(), tt.want)
+	for _, c := range u64 {
+		got, err := DecodeUint64(c.in)
+		if !errors.Is(err, c.err) || (err == nil && got != c.want) {
+			t.Errorf("DecodeUint64(%q) = %d, %v; want %d, %v", c.in, got, err, c.want, c.err)
 		}
 	}
-}
-
-func TestDecodeBig256Range(t *testing.T) {
-	// 65 hex digits after 0x = > 256 bits
-	_, err := DecodeBig("0x" + "1" + "0000000000000000000000000000000000000000000000000000000000000000")
-	if err != ErrBig256Range {
-		t.Errorf("DecodeBig oversized: error = %v, want ErrBig256Range", err)
+	if s := EncodeUint64(255); s != "0xff" {
+		t.Errorf("EncodeUint64(255) = %q", s)
 	}
-}
-
-func TestMustDecodeBig(t *testing.T) {
-	got := MustDecodeBig("0xff")
-	if got.Int64() != 255 {
-		t.Error("MustDecodeBig failed")
+	if s := EncodeBig(big.NewInt(-255)); s != "-0xff" {
+		t.Errorf("EncodeBig(-255) = %q", s)
 	}
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("MustDecodeBig: expected panic for invalid input")
-		}
-	}()
-	MustDecodeBig("invalid")
-}
-
-func TestUint64RoundTrip(t *testing.T) {
-	values := []uint64{0, 1, 127, 255, 65535, 1<<32 - 1, 1<<64 - 1}
-	for _, v := range values {
-		enc := EncodeUint64(v)
-		dec, err := DecodeUint64(enc)
-		if err != nil {
-			t.Errorf("DecodeUint64(EncodeUint64(%d)): %v", v, err)
-		}
-		if dec != v {
-			t.Errorf("Uint64 round-trip %d → %q → %d", v, enc, dec)
-		}
+	if s := EncodeBig(new(big.Int)); s != "0x0" {
+		t.Errorf("EncodeBig(0) = %q", s)
+	}
+	max256 := "0x" + string(repeat('f', 64))
+	if v, err := DecodeBig(max256); err != nil || v.BitLen() != 256 {
+		t.Errorf("DecodeBig(2^256-1) = %v, %v", v, err)
+	}
+	if _, err := DecodeBig("0x1" + string(repeat('0', 64))); !errors.Is(err, ErrBig256Range) {
+		t.Errorf("DecodeBig(2^256) error = %v", err)
 	}
 }
 
-func TestBigRoundTrip(t *testing.T) {
-	values := []*big.Int{
-		big.NewInt(0),
-		big.NewInt(1),
-		big.NewInt(255),
-		new(big.Int).Lsh(big.NewInt(1), 128),
+func repeat(c byte, n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = c
 	}
-	for _, v := range values {
-		enc := EncodeBig(v)
-		dec, err := DecodeBig(enc)
-		if err != nil {
-			t.Errorf("DecodeBig(EncodeBig(%v)): %v", v, err)
-		}
-		if v.Cmp(dec) != 0 {
-			t.Errorf("Big round-trip %v → %q → %v", v, enc, dec)
-		}
+	return b
+}
+
+func TestJSON(t *testing.T) {
+	type doc struct {
+		B  Bytes  `json:"b"`
+		U  Uint64 `json:"u"`
+		U8 Uint8  `json:"u8"`
+		N  *Big   `json:"n"`
+	}
+	in := doc{B: Bytes{1, 2}, U: 300, U8: 7, N: (*Big)(big.NewInt(1 << 40))}
+	enc, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"b":"0x0102","u":"0x12c","u8":"0x7","n":"0x10000000000"}`
+	if string(enc) != want {
+		t.Fatalf("Marshal = %s, want %s", enc, want)
+	}
+	var out doc
+	if err := json.Unmarshal(enc, &out); err != nil {
+		t.Fatal(err)
+	}
+	if string(out.B) != string(in.B) || out.U != in.U || out.U8 != in.U8 || out.N.ToInt().Cmp(in.N.ToInt()) != 0 {
+		t.Fatalf("round trip = %+v, want %+v", out, in)
+	}
+
+	// An empty string decodes to the zero value; non-strings are type errors.
+	var u Uint64
+	if err := json.Unmarshal([]byte(`""`), &u); err != nil || u != 0 {
+		t.Errorf(`Uint64 from "" = %d, %v`, u, err)
+	}
+	var typeErr *json.UnmarshalTypeError
+	if err := json.Unmarshal([]byte(`5`), &u); !errors.As(err, &typeErr) {
+		t.Errorf("Uint64 from number: error = %v, want a type error", err)
+	}
+	var u8 Uint8
+	if err := json.Unmarshal([]byte(`"0x100"`), &u8); !errors.As(err, &typeErr) {
+		t.Errorf("Uint8 out of range: error = %v, want a type error", err)
+	}
+}
+
+func TestUnmarshalFixed(t *testing.T) {
+	out := make([]byte, 2)
+	if err := UnmarshalFixedText("T", []byte("0x0102"), out); err != nil || out[0] != 1 || out[1] != 2 {
+		t.Errorf("UnmarshalFixedText = %x, %v", out, err)
+	}
+	if err := UnmarshalFixedText("T", []byte("0102"), out); !errors.Is(err, ErrMissingPrefix) {
+		t.Errorf("UnmarshalFixedText without prefix: error = %v", err)
+	}
+	if err := UnmarshalFixedUnprefixedText("T", []byte("0304"), out); err != nil || out[0] != 3 || out[1] != 4 {
+		t.Errorf("UnmarshalFixedUnprefixedText = %x, %v", out, err)
+	}
+	err := UnmarshalFixedText("T", []byte("0x01"), out)
+	if err == nil || err.Error() != "hex string has length 2, want 4 for T" {
+		t.Errorf("UnmarshalFixedText wrong length: error = %v", err)
+	}
+	if err := UnmarshalFixedJSON(bytesType, []byte(`"0x0506"`), out); err != nil || out[0] != 5 {
+		t.Errorf("UnmarshalFixedJSON = %x, %v", out, err)
 	}
 }

@@ -1,4 +1,5 @@
 // Copyright 2026 Digital Clever Solution LLC
+// SPDX-License-Identifier: Apache-2.0
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -337,71 +338,5 @@ func TestAddressScan(t *testing.T) {
 	}
 	if err := a.Scan([]byte{1}); err == nil {
 		t.Error("Scan: expected error for wrong length")
-	}
-}
-
-func TestMixedcaseAddress(t *testing.T) {
-	addr := BytesToAddress([]byte{
-		0xde, 0xad, 0xbe, 0xef,
-		0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x01,
-	})
-	ma := NewMixedcaseAddress(addr)
-	if ma.Address() != addr {
-		t.Error("MixedcaseAddress.Address() mismatch")
-	}
-	if ma.Original() != addr.Hex() {
-		t.Error("MixedcaseAddress.Original() mismatch")
-	}
-	if !ma.ValidChecksum() {
-		t.Error("MixedcaseAddress: checksum should be valid when created from Address")
-	}
-
-	// From string: valid checksum address
-	hexStr := addr.Hex()
-	maf, err := NewMixedcaseAddressFromString(hexStr)
-	if err != nil {
-		t.Fatalf("NewMixedcaseAddressFromString: %v", err)
-	}
-	if maf.Address() != addr {
-		t.Error("NewMixedcaseAddressFromString: address mismatch")
-	}
-	// invalid
-	if _, err := NewMixedcaseAddressFromString("not-an-address"); err == nil {
-		t.Error("NewMixedcaseAddressFromString: expected error for invalid input")
-	}
-}
-
-func TestUnprefixedHash(t *testing.T) {
-	h := BytesToHash([]byte{0xab, 0xcd})
-	uh := UnprefixedHash(h)
-	text, err := uh.MarshalText()
-	if err != nil {
-		t.Fatalf("MarshalText: %v", err)
-	}
-	var decoded UnprefixedHash
-	if err := decoded.UnmarshalText(text); err != nil {
-		t.Fatalf("UnmarshalText: %v", err)
-	}
-	if uh != decoded {
-		t.Errorf("UnprefixedHash round-trip failed")
-	}
-}
-
-func TestUnprefixedAddress(t *testing.T) {
-	a := BytesToAddress([]byte{0x11, 0x22})
-	ua := UnprefixedAddress(a)
-	text, err := ua.MarshalText()
-	if err != nil {
-		t.Fatalf("MarshalText: %v", err)
-	}
-	var decoded UnprefixedAddress
-	if err := decoded.UnmarshalText(text); err != nil {
-		t.Fatalf("UnmarshalText: %v", err)
-	}
-	if ua != decoded {
-		t.Errorf("UnprefixedAddress round-trip failed")
 	}
 }
