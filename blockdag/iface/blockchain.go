@@ -58,6 +58,10 @@ type ChainConfig struct {
 	ForkSlotDelegate      uint64
 	ForkSlotValSyncProc   uint64
 	ForkSlotValOpTracking uint64
+	// ForkSlotUpSecondsPerSlot is the first slot which lasts UpSecondsPerSlot seconds.
+	// Zero UpSecondsPerSlot disables the fork. See types.SlotInfo.
+	ForkSlotUpSecondsPerSlot uint64
+	UpSecondsPerSlot         uint64
 }
 
 // IsForkSlotDelegate reports whether the delegate fork is active at the given slot.
