@@ -232,19 +232,74 @@ type SlotInfo struct {
 	GenesisTime    uint64 `json:"genesisTime"`
 	SecondsPerSlot uint64 `json:"secondsPerSlot"`
 	SlotsPerEpoch  uint64 `json:"slotsPerEpoch"`
+	// ForkSlotUpSecondsPerSlot is the first slot which lasts UpSecondsPerSlot seconds
+	// instead of SecondsPerSlot. Zero UpSecondsPerSlot disables the fork, so slot
+	// duration stays SecondsPerSlot for the whole chain.
+	ForkSlotUpSecondsPerSlot uint64 `json:"forkSlotUpSecondsPerSlot,omitempty"`
+	UpSecondsPerSlot         uint64 `json:"upSecondsPerSlot,omitempty"`
+}
+
+// IsForkUpSecondsPerSlot returns true if the slot duration fork is enabled and the
+// given slot is greater or equal of the fork slot ForkSlotUpSecondsPerSlot.
+func (si *SlotInfo) IsForkUpSecondsPerSlot(slot uint64) bool {
+	return si.UpSecondsPerSlot > 0 && slot >= si.ForkSlotUpSecondsPerSlot
+}
+
+// SecondsPerSlotBySlot returns the duration of the given slot in seconds.
+func (si *SlotInfo) SecondsPerSlotBySlot(slot uint64) uint64 {
+	if si.IsForkUpSecondsPerSlot(slot) {
+		return si.UpSecondsPerSlot
+	}
+	return si.SecondsPerSlot
+}
+
+// upSecondsPerSlotForkTime returns the unix time of the ForkSlotUpSecondsPerSlot slot
+// start. The second result is false if the fork is disabled or unreachable, in that
+// case the whole chain is timed with the base SecondsPerSlot.
+func (si *SlotInfo) upSecondsPerSlotForkTime() (uint64, bool) {
+	if si.UpSecondsPerSlot == 0 {
+		return 0, false
+	}
+	overflows, timeSinceGenesis := bits.Mul64(si.ForkSlotUpSecondsPerSlot, si.SecondsPerSlot)
+	if overflows > 0 {
+		return 0, false
+	}
+	forkTime, carry := bits.Add64(timeSinceGenesis, si.GenesisTime, 0)
+	if carry > 0 {
+		return 0, false
+	}
+	return forkTime, true
 }
 
 // StartSlotTime returns the start time of the given slot.
+// Slots before ForkSlotUpSecondsPerSlot are counted from the genesis time with
+// SecondsPerSlot, the rest are counted from the fork time with UpSecondsPerSlot.
 func (si *SlotInfo) StartSlotTime(slot uint64) (time.Time, error) {
-	overflows, timeSinceGenesis := bits.Mul64(slot, si.SecondsPerSlot)
+	baseTime, baseSlot, sps := si.GenesisTime, uint64(0), si.SecondsPerSlot
+	if forkTime, ok := si.upSecondsPerSlotForkTime(); ok && slot >= si.ForkSlotUpSecondsPerSlot {
+		baseTime, baseSlot, sps = forkTime, si.ForkSlotUpSecondsPerSlot, si.UpSecondsPerSlot
+	}
+	overflows, timeSinceBase := bits.Mul64(slot-baseSlot, sps)
 	if overflows > 0 {
 		return time.Unix(0, 0), fmt.Errorf("slot (%d) is in the far distant future: %w", slot, errors.New("multiplication overflows"))
 	}
-	sTime, carry := bits.Add64(timeSinceGenesis, si.GenesisTime, 0)
+	sTime, carry := bits.Add64(timeSinceBase, baseTime, 0)
 	if carry > 0 {
 		return time.Unix(0, 0), fmt.Errorf("slot (%d) is in the far distant future: %w", slot, errors.New("addition overflows"))
 	}
 	return time.Unix(int64(sTime), 0), nil
+}
+
+// SlotByTimestamp returns the slot containing the given unix timestamp.
+// It is the inverse of StartSlotTime and takes the slot duration fork into account.
+func (si *SlotInfo) SlotByTimestamp(timestamp uint64) uint64 {
+	if timestamp <= si.GenesisTime {
+		return 0
+	}
+	if forkTime, ok := si.upSecondsPerSlotForkTime(); ok && timestamp >= forkTime {
+		return si.ForkSlotUpSecondsPerSlot + (timestamp-forkTime)/si.UpSecondsPerSlot
+	}
+	return (timestamp - si.GenesisTime) / si.SecondsPerSlot
 }
 
 // CurrentSlot returns the current slot as determined by the local clock.
@@ -254,7 +309,7 @@ func (si *SlotInfo) CurrentSlot() uint64 {
 	if now < genesis {
 		return 0
 	}
-	return uint64(now-genesis) / si.SecondsPerSlot
+	return si.SlotByTimestamp(uint64(now))
 }
 
 // IsEpochStart returns true if slot is the first slot of an epoch.
@@ -307,9 +362,22 @@ func (si *SlotInfo) Copy() *SlotInfo {
 	if si == nil {
 		return nil
 	}
-	return &SlotInfo{
-		GenesisTime:    si.GenesisTime,
-		SecondsPerSlot: si.SecondsPerSlot,
-		SlotsPerEpoch:  si.SlotsPerEpoch,
+	cpy := *si
+	return &cpy
+}
+
+// MatchCoordinatorParams returns true if the slot settings received from the coordinating
+// network are compatible with the local ones at the given slot.
+//
+// The coordinator is not aware of the ForkSlotUpSecondsPerSlot fork and reports a single
+// slot duration, so its SecondsPerSlot is accepted when it matches either the base slot
+// duration or the one in effect at the given slot.
+func (si *SlotInfo) MatchCoordinatorParams(coord *SlotInfo, slot uint64) bool {
+	if si == nil || coord == nil {
+		return false
 	}
+	if si.GenesisTime != coord.GenesisTime || si.SlotsPerEpoch != coord.SlotsPerEpoch {
+		return false
+	}
+	return coord.SecondsPerSlot == si.SecondsPerSlot || coord.SecondsPerSlot == si.SecondsPerSlotBySlot(slot)
 }
