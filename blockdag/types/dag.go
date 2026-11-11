@@ -153,6 +153,8 @@ type ValidatorSync struct {
 	Balance         *big.Int
 	ActivationEpoch uint64
 	ExitEpoch       uint64
+	// StakeAmount is the part of Amount withdrawn from the stake (the rest is rewards).
+	StakeAmount *big.Int
 }
 
 type validatorSyncMarshaling struct {
@@ -166,6 +168,7 @@ type validatorSyncMarshaling struct {
 	Balance         *hexutil.Big    `json:"balance"`
 	ActivationEpoch *hexutil.Uint64 `json:"activationEpoch"`
 	ExitEpoch       *hexutil.Uint64 `json:"exitEpoch"`
+	StakeAmount     *hexutil.Big    `json:"stakeAmount,omitempty"`
 }
 
 // Copy returns a deep copy of vs.
@@ -189,6 +192,9 @@ func (vs *ValidatorSync) Copy() *ValidatorSync {
 	if vs.Balance != nil {
 		cpy.Balance = new(big.Int).Set(vs.Balance)
 	}
+	if vs.StakeAmount != nil {
+		cpy.StakeAmount = new(big.Int).Set(vs.StakeAmount)
+	}
 	return cpy
 }
 
@@ -205,10 +211,14 @@ func (vs *ValidatorSync) Print() string {
 	if vs.Balance != nil {
 		balance = vs.Balance.String()
 	}
+	stakeAmount := "<nil>"
+	if vs.StakeAmount != nil {
+		stakeAmount = vs.StakeAmount.String()
+	}
 	return fmt.Sprintf(
-		"{InitTxHash: %#x, OpType: %d, ProcEpoch: %d, Index: %d, Creator: %#x, Amount: %s, Balance: %s, TxHash: %#x, ActivationEpoch: %d, ExitEpoch: %d}",
+		"{InitTxHash: %#x, OpType: %d, ProcEpoch: %d, Index: %d, Creator: %#x, Amount: %s, Balance: %s, TxHash: %#x, ActivationEpoch: %d, ExitEpoch: %d, StakeAmount: %s}",
 		vs.InitTxHash, vs.OpType, vs.ProcEpoch, vs.Index, vs.Creator,
-		amount, balance, vs.TxHash, vs.ActivationEpoch, vs.ExitEpoch,
+		amount, balance, vs.TxHash, vs.ActivationEpoch, vs.ExitEpoch, stakeAmount,
 	)
 }
 
@@ -237,6 +247,9 @@ func (vs *ValidatorSync) MarshalJSON() ([]byte, error) {
 	}
 	if vs.Balance != nil {
 		out.Balance = (*hexutil.Big)(vs.Balance)
+	}
+	if vs.StakeAmount != nil {
+		out.StakeAmount = (*hexutil.Big)(vs.StakeAmount)
 	}
 	return json.Marshal(out)
 }
@@ -276,6 +289,9 @@ func (vs *ValidatorSync) UnmarshalJSON(input []byte) error {
 	}
 	if dec.ExitEpoch != nil {
 		vs.ExitEpoch = uint64(*dec.ExitEpoch)
+	}
+	if dec.StakeAmount != nil {
+		vs.StakeAmount = (*big.Int)(dec.StakeAmount)
 	}
 	return nil
 }

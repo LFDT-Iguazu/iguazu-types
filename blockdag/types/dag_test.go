@@ -109,14 +109,14 @@ func TestValidatorSync_Print(t *testing.T) {
 			src:  src_1,
 			want: "{InitTxHash: 0x0102030000000000000000000000000000000000000000000000000000000000, OpType: 2, " +
 				"ProcEpoch: 45645, Index: 45645, Creator: 0xffffffffffffffffffffffffffffffffffffffff, " +
-				"Amount: 32789456000000, Balance: <nil>, TxHash: <nil>, ActivationEpoch: 0, ExitEpoch: 0}",
+				"Amount: 32789456000000, Balance: <nil>, TxHash: <nil>, ActivationEpoch: 0, ExitEpoch: 0, StakeAmount: <nil>}",
 		},
 		{
 			name: "Copy-v2",
 			src:  src_2,
 			want: "{InitTxHash: 0x6bd2dcd23984cfb26a005a677d5d94e6e58467026fdbd40b8b7da891247b799f, OpType: 2, " +
 				"ProcEpoch: 45645, Index: 45645, Creator: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, " +
-				"Amount: 32999956000000, Balance: <nil>, TxHash: <nil>, ActivationEpoch: 645, ExitEpoch: 18446744073709551615}",
+				"Amount: 32999956000000, Balance: <nil>, TxHash: <nil>, ActivationEpoch: 645, ExitEpoch: 18446744073709551615, StakeAmount: <nil>}",
 		},
 	}
 	for _, tt := range tests {
