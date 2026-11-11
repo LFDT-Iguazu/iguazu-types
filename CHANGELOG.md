@@ -3,7 +3,13 @@
 Release notes for every version are published with its
 [GitHub Release](https://github.com/LFDT-Iguazu/iguazu-types/releases).
 
-## Unreleased
+## v0.3.0
+
+### Added
+
+- `ValidatorSync` gets the optional `StakeAmount` field, the part of `Amount` taken from the stake. A nil value means it is not set and is not the same as zero. `Copy()` deep-copies it, JSON encodes it as `stakeAmount` (omitted when nil) and `Print()` shows it. JSON payloads without the field are unchanged.
+
+## v0.2.0
 
 ### Changed
 
