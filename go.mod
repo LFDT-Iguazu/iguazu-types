@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.26.11
 
 require (
-	github.com/supranational/blst v0.3.16
+	github.com/supranational/blst v0.3.17
 	golang.org/x/crypto v0.59.0
 )
 
