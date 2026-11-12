@@ -3,6 +3,17 @@
 Release notes for every version are published with its
 [GitHub Release](https://github.com/LFDT-Iguazu/iguazu-types/releases).
 
+## v0.4.0
+
+### Changed
+
+- Requires Go 1.26 (`go 1.26.0`, toolchain `go1.26.11`); modules depending on `iguazu-types` must use Go 1.26 or later.
+- Dependencies updated to versions with known security fixes: `golang.org/x/crypto` v0.59.0, `golang.org/x/sys` v0.50.0.
+
+### Removed
+
+- Unused dependencies `github.com/stretchr/testify`, `github.com/pkg/errors` and `gotest.tools`.
+
 ## v0.3.0
 
 ### Added
