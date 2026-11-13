@@ -9,6 +9,7 @@ Release notes for every version are published with its
 
 - Requires Go 1.26 (`go 1.26.0`, toolchain `go1.26.11`); modules depending on `iguazu-types` must use Go 1.26 or later.
 - Dependencies updated to versions with known security fixes: `golang.org/x/crypto` v0.59.0, `golang.org/x/sys` v0.50.0.
+- `github.com/supranational/blst` updated to v0.3.17.
 
 ### Removed
 
