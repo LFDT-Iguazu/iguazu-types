@@ -61,12 +61,16 @@ func isHex(s string) bool {
 		return false
 	}
 	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F') {
+		if !isHexDigit(s[i]) {
 			return false
 		}
 	}
 	return true
+}
+
+// isHexDigit reports whether c is a hex digit in either letter case.
+func isHexDigit(c byte) bool {
+	return '0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F'
 }
 
 // Bytes2Hex returns the hex encoding of d without a prefix.

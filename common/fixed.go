@@ -75,7 +75,8 @@ func formatFixed(s fmt.State, verb rune, b []byte, display, kind string) {
 		}
 		_, _ = s.Write([]byte(digits))
 	case 'd':
-		_, _ = fmt.Fprint(s, b)
+		// Print the bytes as a list of decimal numbers, not as a string.
+		_, _ = fmt.Fprint(s, b) //nolint:staticcheck // QF1010: converting to string would change the output
 	default:
 		_, _ = fmt.Fprintf(s, "%%!%c(%s=%x)", verb, kind, b)
 	}

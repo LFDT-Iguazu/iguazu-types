@@ -29,7 +29,7 @@ func EncodeToBytes(val interface{}) ([]byte, error) {
 // encodeValue dispatches encoding by type.
 func encodeValue(v reflect.Value) ([]byte, error) {
 	// Dereference pointer
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			// nil pointer without context — caller should handle via struct field tags
 			return []byte{0x80}, nil
@@ -181,7 +181,7 @@ func encodeField(v reflect.Value, f structField) ([]byte, error) {
 		return encodeByteSlice(v.Bytes()), nil
 	}
 
-	if f.nilOK && v.Kind() == reflect.Ptr {
+	if f.nilOK && v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return nilEncoding(v.Type().Elem()), nil
 		}
@@ -254,7 +254,7 @@ func bigEndianBytes(n uint64) []byte {
 // isZeroValue returns true if v is the zero value of its type.
 func isZeroValue(v reflect.Value) bool {
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Slice, reflect.Map:
+	case reflect.Pointer, reflect.Slice, reflect.Map:
 		return v.IsNil()
 	default:
 		return v.IsZero()
