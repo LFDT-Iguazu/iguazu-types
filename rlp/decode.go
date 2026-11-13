@@ -24,7 +24,7 @@ import (
 // DecodeBytes decodes an RLP-encoded byte slice into val (must be a pointer).
 func DecodeBytes(b []byte, val interface{}) error {
 	rv := reflect.ValueOf(val)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return fmt.Errorf("rlp: DecodeBytes requires a non-nil pointer")
 	}
 	rest, err := decodeValue(b, rv.Elem())
@@ -39,7 +39,7 @@ func DecodeBytes(b []byte, val interface{}) error {
 
 // decodeValue decodes the first RLP item from b into v and returns remaining bytes.
 func decodeValue(b []byte, v reflect.Value) ([]byte, error) {
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			v.Set(reflect.New(v.Type().Elem()))
 		}
@@ -319,7 +319,7 @@ func decodeStruct(b []byte, v reflect.Value) ([]byte, error) {
 			return nil, fmt.Errorf("rlp: too few elements for struct %s", v.Type())
 		}
 
-		if f.nilOK && fv.Kind() == reflect.Ptr {
+		if f.nilOK && fv.Kind() == reflect.Pointer {
 			content, err = decodeNilablePtr(content, fv)
 		} else {
 			content, err = decodeValue(content, fv)

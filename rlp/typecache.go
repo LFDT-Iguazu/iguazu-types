@@ -89,7 +89,7 @@ func buildStructFields(t reflect.Type) ([]structField, error) {
 		}
 
 		// Validate nilOK: only valid on pointer fields
-		if sf.nilOK && f.Type.Kind() != reflect.Ptr {
+		if sf.nilOK && f.Type.Kind() != reflect.Pointer {
 			return nil, fmt.Errorf("rlp: field %s.%s has rlp:\"nil\" but is not a pointer", t.Name(), f.Name)
 		}
 
